@@ -1,5 +1,5 @@
 import { TableStakes, TableSummary } from '../../../shared/types.js';
-import { Table, TableEventCallback } from '../engine/Table.js';
+import { Table, TableEventCallback } from '../../../shared/engine/Table.js';
 
 export class LobbyManager {
   private tables: Map<string, Table> = new Map();

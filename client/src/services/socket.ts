@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { PlayerActionType } from '../../../shared/types.js';
+import { localPokerEngine } from './localEngine.js';
 
 function getOrCreateUserId(): string {
   const stored = localStorage.getItem('poker_user_id');
@@ -23,24 +24,100 @@ class SocketService {
   public userName: string = getStoredUserName();
   public userAvatar: string = getStoredUserAvatar();
 
-  public init(): Socket {
-    if (this.socket) return this.socket;
+  private usingLocalEngine: boolean = false;
+  private listeners: Map<string, Set<Function>> = new Map();
 
-    const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '/';
-    this.socket = io(serverUrl, {
-      query: {
-        userId: this.userId,
-        name: this.userName || undefined,
-        avatar: this.userAvatar,
-      },
-      transports: ['websocket', 'polling'],
+  public init() {
+    // If running in production (GitHub Pages) or if no backend server available
+    const isGitHubPages = window.location.hostname.includes('github.io');
+    const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+
+    if (!isGitHubPages && serverUrl) {
+      try {
+        this.socket = io(serverUrl, {
+          query: {
+            userId: this.userId,
+            name: this.userName || undefined,
+            avatar: this.userAvatar,
+          },
+          transports: ['websocket', 'polling'],
+          timeout: 2000,
+        });
+
+        this.socket.on('connect', () => {
+          console.log('Connected to remote Poker Server:', this.socket?.id);
+          this.usingLocalEngine = false;
+        });
+
+        this.socket.on('connect_error', () => {
+          console.log('Remote server unreachable, falling back to in-browser engine');
+          this.fallbackToLocal();
+        });
+      } catch {
+        this.fallbackToLocal();
+      }
+    } else {
+      this.fallbackToLocal();
+    }
+
+    // Connect local engine events to dispatch
+    localPokerEngine.subscribe((event, payload) => {
+      if (this.usingLocalEngine) {
+        this.dispatch(event, payload);
+      }
     });
 
-    this.socket.on('connect', () => {
-      console.log('Connected to Poker Server, socket ID:', this.socket?.id);
-    });
+    // Initial triggers for local engine
+    if (this.usingLocalEngine) {
+      setTimeout(() => {
+        this.dispatch('user_profile', localPokerEngine.getUserProfile());
+        this.dispatch('table_list', localPokerEngine.getAllSummaries());
+      }, 50);
+    }
 
-    return this.socket;
+    return this;
+  }
+
+  private fallbackToLocal() {
+    this.usingLocalEngine = true;
+    setTimeout(() => {
+      this.dispatch('user_profile', localPokerEngine.getUserProfile());
+      this.dispatch('table_list', localPokerEngine.getAllSummaries());
+    }, 50);
+  }
+
+  public on(event: string, callback: Function) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+
+    if (this.socket) {
+      this.socket.on(event, callback as any);
+    }
+  }
+
+  public off(event: string, callback?: Function) {
+    if (callback) {
+      this.listeners.get(event)?.delete(callback);
+      if (this.socket) {
+        this.socket.off(event, callback as any);
+      }
+    } else {
+      this.listeners.delete(event);
+      if (this.socket) {
+        this.socket.off(event);
+      }
+    }
+  }
+
+  private dispatch(event: string, payload: any) {
+    const handlers = this.listeners.get(event);
+    if (handlers) {
+      for (const fn of handlers) {
+        fn(payload);
+      }
+    }
   }
 
   public updateProfile(name: string, avatar?: string) {
@@ -50,21 +127,34 @@ class SocketService {
       this.userAvatar = avatar;
       localStorage.setItem('poker_user_avatar', avatar);
     }
-    this.socket?.emit('update_profile', { name, avatar });
+
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.updateProfile(name, avatar);
+    } else {
+      this.socket.emit('update_profile', { name, avatar });
+    }
   }
 
   public getTables() {
-    this.socket?.emit('get_tables');
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      this.dispatch('table_list', localPokerEngine.getAllSummaries());
+    } else {
+      this.socket.emit('get_tables');
+    }
   }
 
   public joinTable(tableId: string, buyIn: number, seatIndex?: number) {
-    this.socket?.emit('join_table', {
-      tableId,
-      buyIn,
-      seatIndex,
-      name: this.userName,
-      avatar: this.userAvatar,
-    });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.joinTable(tableId, buyIn, seatIndex);
+    } else {
+      this.socket.emit('join_table', {
+        tableId,
+        buyIn,
+        seatIndex,
+        name: this.userName,
+        avatar: this.userAvatar,
+      });
+    }
   }
 
   public createPrivateRoom(params: {
@@ -75,36 +165,64 @@ class SocketService {
     buyIn: number;
     enableBots?: boolean;
   }) {
-    this.socket?.emit('create_private_room', params);
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.createPrivateRoom(params);
+    } else {
+      this.socket.emit('create_private_room', params);
+    }
   }
 
   public joinRoomByCode(code: string, buyIn?: number) {
-    this.socket?.emit('join_room_by_code', {
-      code,
-      buyIn,
-      name: this.userName,
-      avatar: this.userAvatar,
-    });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.joinRoomByCode(code, buyIn);
+    } else {
+      this.socket.emit('join_room_by_code', {
+        code,
+        buyIn,
+        name: this.userName,
+        avatar: this.userAvatar,
+      });
+    }
   }
 
   public leaveTable(tableId: string) {
-    this.socket?.emit('leave_table', { tableId });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.leaveTable(tableId);
+    } else {
+      this.socket.emit('leave_table', { tableId });
+    }
   }
 
   public sendAction(tableId: string, action: PlayerActionType, amount?: number) {
-    this.socket?.emit('player_action', { tableId, action, amount });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.sendAction(tableId, action, amount);
+    } else {
+      this.socket.emit('player_action', { tableId, action, amount });
+    }
   }
 
   public refillChips() {
-    this.socket?.emit('refill_chips');
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.refillChips();
+    } else {
+      this.socket.emit('refill_chips');
+    }
   }
 
   public addBot(tableId: string) {
-    this.socket?.emit('add_bot', { tableId });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.addBot(tableId);
+    } else {
+      this.socket.emit('add_bot', { tableId });
+    }
   }
 
   public sendChat(tableId: string, message: string) {
-    this.socket?.emit('send_chat', { tableId, message });
+    if (this.usingLocalEngine || !this.socket?.connected) {
+      localPokerEngine.sendChat(tableId, message);
+    } else {
+      this.socket.emit('send_chat', { tableId, message });
+    }
   }
 }
 
