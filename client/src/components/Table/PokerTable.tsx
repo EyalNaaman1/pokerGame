@@ -1,6 +1,7 @@
-import { ArrowLeft, Bot, Check, Copy, Share2, Volume2 } from 'lucide-react';
-import React, { useState } from 'react';
+import { ArrowLeft, Bot, Check, Coins, Copy, Share2, Sparkles, Trophy } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import { PlayerActionType, TableState, UserProfile } from '../../../../shared/types.js';
+import { HandEvaluator } from '../../../../shared/engine/HandEvaluator.js';
 import { socketService } from '../../services/socket.js';
 import { sound } from '../../services/sound.js';
 import { formatChips } from '../Common/ChipStack.js';
@@ -49,23 +50,33 @@ export const PokerTable: React.FC<PokerTableProps> = ({
   const handleCopyInvite = () => {
     sound.playButtonClick();
     const code = tableState.code || tableState.id;
-    const url = `${window.location.origin}/?room=${code}`;
+    const url = `${window.location.origin}/pokerGame/?room=${code}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // Helper to compute elliptical seat position relative to table
+  // Real-time Hand Strength evaluation for local player
+  const currentHandDescription = useMemo(() => {
+    if (!localPlayerSeat || !localPlayerSeat.cards || localPlayerSeat.cards.length < 2) return null;
+    if (tableState.communityCards.length < 3) return null;
+    try {
+      const all = [...localPlayerSeat.cards, ...tableState.communityCards];
+      const ev = HandEvaluator.evaluate(all);
+      return ev.rankName;
+    } catch {
+      return null;
+    }
+  }, [localPlayerSeat, tableState.communityCards]);
+
+  // Elliptical seat position relative to table
   const getSeatPosition = (seatIndex: number) => {
-    // Offset so local player is always at the bottom center
     const offset = localSeatIndex !== -1 ? localSeatIndex : 0;
     const visualIndex = (seatIndex - offset + maxSeats) % maxSeats;
 
-    // Angle theta: start at bottom (Math.PI / 2) and go clockwise
     const theta = (visualIndex / maxSeats) * 2 * Math.PI + Math.PI / 2;
-    // Ellipse radius percentages
-    const rx = 42; // horizontal radius %
-    const ry = 38; // vertical radius %
+    const rx = 43;
+    const ry = 39;
 
     const left = 50 + rx * Math.cos(theta);
     const top = 50 + ry * Math.sin(theta);
@@ -74,22 +85,22 @@ export const PokerTable: React.FC<PokerTableProps> = ({
   };
 
   return (
-    <div className="relative w-full min-h-[calc(100vh-4rem)] flex flex-col justify-between p-2 md:p-6 select-none overflow-hidden">
-      {/* Table Header Utility Bar */}
-      <div className="flex items-center justify-between z-30 mb-2 gap-2 flex-wrap">
+    <div className="relative w-full h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)] flex flex-col justify-between p-1.5 md:p-3 select-none overflow-hidden">
+      {/* Table Header Bar */}
+      <div className="flex items-center justify-between z-30 shrink-0 gap-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
               sound.playButtonClick();
               onLeaveTable();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-xs font-bold text-slate-300 transition active:scale-95 shadow-md"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-xs font-bold text-slate-300 transition active:scale-95 shadow-md"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Leave Table</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Leave</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
+          <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-300">
             <span className="font-extrabold text-amber-400">{tableState.name}</span>
             <span className="text-slate-500">|</span>
             <span>
@@ -97,21 +108,21 @@ export const PokerTable: React.FC<PokerTableProps> = ({
             </span>
           </div>
 
-          {/* Room Code Badge with Copy button */}
+          {/* Room Code Badge */}
           {tableState.code && (
             <button
               onClick={handleCopyInvite}
               title="Click to copy invite link for friends"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-extrabold transition active:scale-95 shadow-md"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-extrabold transition active:scale-95 shadow-md"
             >
               {copiedLink ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400">Link Copied!</span>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-400">Copied!</span>
                 </>
               ) : (
                 <>
-                  <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                  <Share2 className="w-3 h-3 text-amber-400" />
                   <span>Code: <span className="font-['JetBrains_Mono'] tracking-wider text-white">{tableState.code}</span></span>
                 </>
               )}
@@ -123,8 +134,8 @@ export const PokerTable: React.FC<PokerTableProps> = ({
           {/* Add Bot Button */}
           <button
             onClick={handleAddBot}
-            title="Add a bot player to an empty seat"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900/80 border border-cyan-500/40 text-xs font-bold text-cyan-300 transition active:scale-95 shadow-md"
+            title="Add a bot player"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-cyan-950/80 hover:bg-cyan-900/80 border border-cyan-500/40 text-xs font-bold text-cyan-300 transition active:scale-95 shadow-md"
           >
             <Bot className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">+ Bot</span>
@@ -135,16 +146,16 @@ export const PokerTable: React.FC<PokerTableProps> = ({
         </div>
       </div>
 
-      {/* Poker Table Area */}
-      <div className="flex-1 flex items-center justify-center relative my-2">
+      {/* Poker Table Felt Area */}
+      <div className="flex-1 flex items-center justify-center relative my-1 px-2 overflow-visible">
         {/* The Oval Felt Table */}
-        <div className="relative w-full max-w-5xl h-[520px] md:h-[580px] rounded-[180px] md:rounded-[220px] bg-gradient-to-b from-emerald-800 via-emerald-900 to-[#072d1a] border-[14px] md:border-[18px] border-[#361a0c] shadow-table flex items-center justify-center overflow-visible">
+        <div className="relative w-full max-w-4xl h-[42vh] sm:h-[48vh] md:h-[52vh] max-h-[440px] rounded-[130px] sm:rounded-[170px] md:rounded-[200px] bg-gradient-to-b from-emerald-800 via-emerald-900 to-[#072d1a] border-[10px] sm:border-[13px] md:border-[16px] border-[#361a0c] shadow-table flex items-center justify-center overflow-visible">
           {/* Inner Table Leather Padded Rail & Gold Ring */}
-          <div className="absolute inset-1 rounded-[165px] md:rounded-[205px] border-2 border-amber-500/30 shadow-felt pointer-events-none" />
+          <div className="absolute inset-0.5 rounded-[120px] sm:rounded-[155px] md:rounded-[185px] border-2 border-amber-500/30 shadow-felt pointer-events-none" />
 
           {/* Felt Watermark Pattern */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
-            <span className="text-[280px] font-black text-white">♠</span>
+            <span className="text-[200px] md:text-[240px] font-black text-white">♠</span>
           </div>
 
           {/* Center Community Cards & Pot with Winner Banner */}
@@ -191,8 +202,18 @@ export const PokerTable: React.FC<PokerTableProps> = ({
         </div>
       </div>
 
-      {/* Bottom Action Controls */}
-      <div className="z-30 w-full mt-2">
+      {/* Bottom Area: Hand Strength & Action Controls */}
+      <div className="z-30 w-full shrink-0 flex flex-col items-center gap-1.5 pb-1">
+        {/* Real-time Hand Strength Indicator */}
+        {currentHandDescription && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-200 bg-slate-900/90 border border-amber-400/60 px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1.5 backdrop-blur-md">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span className="text-[11px] font-black uppercase text-amber-300 tracking-wide">
+              Your Hand: {currentHandDescription}
+            </span>
+          </div>
+        )}
+
         {localPlayerSeat && !localPlayerSeat.folded && tableState.stage !== 'WAITING' && tableState.stage !== 'SHOWDOWN' && tableState.stage !== 'HAND_ENDED' ? (
           <ActionControls
             tableState={tableState}
@@ -200,14 +221,14 @@ export const PokerTable: React.FC<PokerTableProps> = ({
             onAction={handleAction}
           />
         ) : localPlayerSeat ? (
-          <div className="text-center py-2 text-xs font-semibold text-slate-400">
+          <div className="text-center py-1 text-xs font-semibold text-slate-400">
             {localPlayerSeat.folded
-              ? 'You have folded. Waiting for the next hand to begin...'
+              ? 'You have folded. Waiting for next hand...'
               : 'Waiting for next hand...'}
           </div>
         ) : (
-          <div className="text-center py-2 text-xs font-semibold text-slate-400">
-            Click on any empty seat above to join the game!
+          <div className="text-center py-1 text-xs font-semibold text-slate-400">
+            Click on any empty seat above to join!
           </div>
         )}
       </div>

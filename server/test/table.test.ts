@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { Table } from '../src/engine/Table.js';
+import { Table } from '../../shared/engine/Table.js';
 
 export function testTableFSM() {
   console.log('--- Testing Table FSM & Hand Flow ---');

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { PlayerContribution, PotManager } from '../src/engine/PotManager.js';
+import { PlayerContribution, PotManager } from '../../shared/engine/PotManager.js';
 
 export function testPotManager() {
   console.log('--- Testing Pot Manager & Side Pots ---');

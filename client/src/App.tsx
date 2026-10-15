@@ -111,7 +111,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100 font-['Outfit'] select-none">
+    <div className="h-screen max-h-screen overflow-hidden bg-slate-950 flex flex-col text-slate-100 font-['Outfit'] select-none">
       {/* Top Navigation */}
       <Navbar
         user={user}
@@ -121,13 +121,13 @@ export const App: React.FC = () => {
 
       {/* Error Toast Notification */}
       {errorMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-rose-600/90 border border-rose-400 text-white font-black text-xs px-5 py-2.5 rounded-full shadow-2xl backdrop-blur-md animate-bounce">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-rose-600/90 border border-rose-400 text-white font-black text-xs px-5 py-2 rounded-full shadow-2xl backdrop-blur-md animate-bounce">
           {errorMessage}
         </div>
       )}
 
-      {/* Main Content View */}
-      <main className="flex-1 flex flex-col">
+      {/* Main Content View: Table is overflow-hidden (zero scroll), Lobby can scroll */}
+      <main className={`flex-1 flex flex-col ${view === 'TABLE' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         {view === 'LOBBY' || !currentTableState ? (
           <LobbyView
             tables={tables}

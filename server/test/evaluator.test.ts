@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { Card, HandRank } from '../../shared/types.js';
-import { HandEvaluator } from '../src/engine/HandEvaluator.js';
+import { HandEvaluator } from '../../shared/engine/HandEvaluator.js';
 
 export function testHandEvaluator() {
   console.log('--- Testing Hand Evaluator ---');

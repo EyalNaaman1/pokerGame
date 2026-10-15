@@ -165,6 +165,14 @@ export class Table {
     if (this.nextHandInterval) clearInterval(this.nextHandInterval);
     this.nextHandSeconds = 0;
 
+    // Auto-rebuy busted bots so game action never stalls
+    for (let i = 0; i < this.stakes.maxSeats; i++) {
+      const p = this.seats[i];
+      if (p && p.isBot && p.chips < this.stakes.bigBlind) {
+        p.chips = this.stakes.minBuyIn * 2;
+      }
+    }
+
     const eligibleSeats = this.getActivePlayersWithChips();
     if (eligibleSeats.length < 2) {
       this.stage = 'WAITING';
@@ -521,10 +529,29 @@ export class Table {
 
   private runRemainingStreetsAndShowdown(): void {
     this.setTurn(null);
-    while (this.communityCards.length < 5) {
-      this.communityCards.push(this.deck.draw());
-    }
-    this.resolveShowdown();
+
+    const dealNextStreet = () => {
+      if (this.communityCards.length < 3) {
+        this.communityCards.push(...this.deck.drawMultiple(3));
+        this.stage = 'FLOP';
+        this.broadcastState();
+        setTimeout(dealNextStreet, 1000);
+      } else if (this.communityCards.length === 3) {
+        this.communityCards.push(this.deck.draw());
+        this.stage = 'TURN';
+        this.broadcastState();
+        setTimeout(dealNextStreet, 1000);
+      } else if (this.communityCards.length === 4) {
+        this.communityCards.push(this.deck.draw());
+        this.stage = 'RIVER';
+        this.broadcastState();
+        setTimeout(dealNextStreet, 1000);
+      } else {
+        this.resolveShowdown();
+      }
+    };
+
+    dealNextStreet();
   }
 
   private resetStreetBets(): void {
